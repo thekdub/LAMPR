@@ -3,7 +3,7 @@
 ![LAMPR Logo](./images/logo.png)
 
 [![License](https://img.shields.io/badge/license-copyright-blue.svg)](LICENSE)
-[![Kotlin Version](https://img.shields.io/badge/kotlin-17-blue.svg)](https://kotlinlang.org/)
+[![Kotlin Version](https://img.shields.io/badge/kotlin-1.9.22-blue.svg)](https://kotlinlang.org/)
 [![Java Version](https://img.shields.io/badge/java-17-blue.svg)](https://adoptium.net/)
 
 LAMPR is a powerful LDAP authentication manager and proxy relay designed to simplify and enhance the management of one-to-many LDAP relationships. It efficiently handles secure connections, removing complexity and load from upstream applications.
@@ -35,6 +35,7 @@ Learn more about [Kotlin Multiplatform](https://www.jetbrains.com/help/kotlin-mu
 
 ### Prerequisites
 
+- [Kotlin 1.9.22](https://kotlinlang.org/)
 - [Java 17](https://adoptium.net/)
 - [MariaDB 11](https://mariadb.org/)
 - At least 1 LDAP server
