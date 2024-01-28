@@ -1,11 +1,13 @@
 package com.thekdub
 
+import com.thekdub.enums.LDAPOperationCode
+import com.thekdub.enums.LDAPResultCode
+import com.thekdub.enums.LDAPSearchScopeCode
 import org.bouncycastle.asn1.*
 import org.bouncycastle.asn1.util.ASN1Dump
 import org.bouncycastle.asn1.x500.X500Name
 import java.io.BufferedInputStream
 import java.io.ByteArrayOutputStream
-import java.io.DataOutputStream
 import java.io.IOException
 import java.net.ServerSocket
 import java.net.Socket
@@ -169,15 +171,8 @@ fun parseRequest(socket: Socket, request: ASN1Sequence): LDAPRequest? {
         LDAPOperationCode.SEARCH_REQUEST -> { // Search Request
             val sequence = operation.baseObject as ASN1Sequence
             val baseDN = String((sequence.getObjectAt(0) as ASN1OctetString).octets, Charsets.US_ASCII)
-            val scope = (sequence.getObjectAt(1) as ASN1Enumerated).intValueExact()
-            // 0 - Base Object -- Just the entry named by baseDN
-            // 1 - Single Level -- Just the immediate container named by baseDN
-            // 2 - Whole Subtree -- Anything within or below baseDN
+            val scope = LDAPSearchScopeCode.fromId((sequence.getObjectAt(1) as ASN1Enumerated).intValueExact())
             val derefAliases = (sequence.getObjectAt(2) as ASN1Enumerated).intValueExact()
-            // 0 - Never Deref Aliases -- Do not dereference aliases in searching
-            // 1 - Deref in Searching -- While searching subordinates of the base DN, deref any alias within search scope. These become vertices of further search scopes where search operation is also applied; when scope is whole subtree, the search continues in subtrees of any deref object. If scope is single level, search is applied to any deref objects, and is not applied to subordinates. Servers should eliminate duplicate entries that arise due to alias dereferencing while searching.
-            // 2 - Deref Finding Base Obj -- Deref aliases in locating the base object of search, but not when searching subordinates of the base object
-            // 3 - Deref Always -- Deref aliases both in searching and in locating the base object of the search.
             val sizeLimit = sequence.getObjectAt(3) as ASN1Integer
             // 0 indicates no client specified limit; servers may also enforce their own limits.
             val timeLimit = sequence.getObjectAt(4) as ASN1Integer
@@ -242,43 +237,3 @@ fun parseRequest(socket: Socket, request: ASN1Sequence): LDAPRequest? {
 
 
 
-interface LDAPRequest {
-    val socket: Socket
-    val messageID: Int
-    val protocolVersion: Int
-
-    fun reply(response: ByteArray)
-
-}
-
-class LDAPBindRequest(
-    override val socket: Socket,
-    override val messageID: Int,
-    override val protocolVersion: Int,
-    val username: String,
-    val password: String
-) : LDAPRequest {
-
-    init {
-        println(this)
-    }
-
-    override fun reply(response: ByteArray) {
-        val out = DataOutputStream(socket.getOutputStream())
-        out.write(response)
-        out.flush()
-    }
-
-    override fun toString(): String {
-        return "LDAPBindRequest={" +
-                "socketIP: ${socket.inetAddress.hostAddress}, " +
-                "socketPort: ${socket.localPort}, " +
-                "messageID: $messageID, " +
-                "protocolVersion: $protocolVersion, " +
-                "username: $username, " +
-                "password: $password}"
-    }
-
-
-
-}
