@@ -2,37 +2,38 @@ package com.thekdub
 
 import com.thekdub.enums.LDAPDerefAliasesCode
 import com.thekdub.enums.LDAPSearchScopeCode
-import java.io.DataOutputStream
 import java.net.Socket
 
 class LDAPSearchRequest(
-    override val socket: Socket,
-    override val messageID: Int,
-    override val protocolVersion: Int,
+    socket: Socket,
+    messageID: Int,
     val baseDN: String,
     val scope: LDAPSearchScopeCode,
     val derefAliases: LDAPDerefAliasesCode,
     val sizeLimit: Int,
     val timeLimit: Int,
-    val typesOnly: Boolean
-) : LDAPRequest {
+    val typesOnly: Boolean,
+    val filters: ArrayList<LDAPSearchFilter>,
+    val attributes: ArrayList<LDAPSearchAttribute>
+) : LDAPRequest(socket, messageID) {
 
     init {
         println(this)
     }
 
-    override fun reply(response: ByteArray) {
-        val out = DataOutputStream(socket.getOutputStream())
-        out.write(response)
-        out.flush()
-    }
-
     override fun toString(): String {
-        return "LDAPBindRequest={" +
+        return "${javaClass.name}={" +
                 "socketIP: ${socket.inetAddress.hostAddress}, " +
                 "socketPort: ${socket.localPort}, " +
                 "messageID: $messageID, " +
-                "protocolVersion: $protocolVersion}"
+                "baseDN: $baseDN, " +
+                "scope: $scope, " +
+                "derefAliases: $derefAliases, " +
+                "sizeLimit: $sizeLimit, " +
+                "timeLimit: $timeLimit, " +
+                "typesOnly: $typesOnly, " +
+                "filters: ${filters.joinToString(", ", "{", "}")}, " +
+                "attributes: ${attributes.joinToString(", ", "{", "}")}}"
     }
 
 

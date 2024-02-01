@@ -1,18 +1,11 @@
 package com.thekdub
 
-import java.io.DataOutputStream
 import java.net.Socket
 
-abstract class LDAPRequest(
-    val socket: Socket,
-    val messageID: Int
-) {
+class LDAPBasicRequest(socket: Socket, messageID: Int) : LDAPRequest(socket, messageID) {
 
-    fun reply(response: ByteArray) {
-        println("Reply: $response")
-        val out = DataOutputStream(socket.getOutputStream())
-        out.write(response)
-        out.flush()
+    init {
+        println(this)
     }
 
     override fun toString(): String {

@@ -1,8 +1,9 @@
 package com.thekdub
 
-import com.thekdub.enums.LDAPOperationCode
-import com.thekdub.enums.LDAPResultCode
-import com.thekdub.enums.LDAPSearchScopeCode
+import com.thekdub.enums.*
+import com.thekdub.exceptions.InvalidRequestException
+import com.thekdub.exceptions.MalformattedRequestException
+import com.thekdub.exceptions.UnsupportedActionException
 import org.bouncycastle.asn1.*
 import org.bouncycastle.asn1.util.ASN1Dump
 import org.bouncycastle.asn1.x500.X500Name
@@ -46,6 +47,9 @@ fun handleClient(socket: Socket) {
                 println("Dump:\n${ASN1Dump.dumpAsString(berData)}")
 
                 if (berData is ASN1Sequence) {
+                    val messageID = (berData.getObjectAt(0) as ASN1Integer).intValueExact()
+                    val baseRequest = LDAPBasicRequest(socket, messageID)
+
                     try {
                         val request = parseRequest(socket, berData)
 
@@ -58,7 +62,17 @@ fun handleClient(socket: Socket) {
                             socket.close()
                         }
 
-                    } catch (e: Exception) {
+                    }
+                    catch (eae: UnsupportedActionException) {
+                        baseRequest.reply(createFailureResponse(messageID, LDAPResultCode.UNWILLING_TO_PERFORM))
+                    }
+                    catch (ire: InvalidRequestException) {
+                        baseRequest.reply(createFailureResponse(messageID, LDAPResultCode.UNWILLING_TO_PERFORM))
+                    }
+                    catch (mre: MalformattedRequestException) {
+                        baseRequest.reply(createFailureResponse(messageID, LDAPResultCode.UNWILLING_TO_PERFORM))
+                    }
+                    catch (e: Exception) {
                         e.printStackTrace()
                     }
                 }
@@ -99,7 +113,7 @@ fun createSuccessResponse(messageId: Int): ByteArray {
     return encodeASN1(DERSequence(response))
 }
 
-fun createFailureResponse(messageId: Int, resultCode: Int): ByteArray {
+fun createFailureResponse(messageId: Int, resultCode: LDAPResultCode): ByteArray {
     val response = ASN1EncodableVector()
 
     // Message ID
@@ -109,7 +123,7 @@ fun createFailureResponse(messageId: Int, resultCode: Int): ByteArray {
     val bindResponse = ASN1EncodableVector()
 
     // Result Code: e.g., invalidCredentials (49)
-    bindResponse.add(ASN1Enumerated(resultCode))
+    bindResponse.add(ASN1Enumerated(resultCode.id))
 
     // Matched DN: empty
     bindResponse.add(X500Name(""))
@@ -172,12 +186,12 @@ fun parseRequest(socket: Socket, request: ASN1Sequence): LDAPRequest? {
             val sequence = operation.baseObject as ASN1Sequence
             val baseDN = String((sequence.getObjectAt(0) as ASN1OctetString).octets, Charsets.US_ASCII)
             val scope = LDAPSearchScopeCode.fromId((sequence.getObjectAt(1) as ASN1Enumerated).intValueExact())
-            val derefAliases = (sequence.getObjectAt(2) as ASN1Enumerated).intValueExact()
-            val sizeLimit = sequence.getObjectAt(3) as ASN1Integer
+            val derefAliases = LDAPDerefAliasesCode.fromId((sequence.getObjectAt(2) as ASN1Enumerated).intValueExact())
+            val sizeLimit = (sequence.getObjectAt(3) as ASN1Integer).intValueExact()
             // 0 indicates no client specified limit; servers may also enforce their own limits.
-            val timeLimit = sequence.getObjectAt(4) as ASN1Integer
+            val timeLimit = (sequence.getObjectAt(4) as ASN1Integer).intValueExact()
             // 0 indicates no client specified limit; servers may also enforce their own limits.
-            val typesOnly = sequence.getObjectAt(5) as ASN1Boolean
+            val typesOnly = (sequence.getObjectAt(5) as ASN1Boolean).isTrue
             // Indicator to if search results are to contain both attribute descriptions and values, or just attribute descriptions. TRUE causes ONLY attribute descriptions to be returned, not values. FALSE returns both.
             val filter = sequence.getObjectAt(6) as ASN1TaggedObject
             // https://datatracker.ietf.org/doc/html/rfc4511#section-4.5.1.7
@@ -185,7 +199,7 @@ fun parseRequest(socket: Socket, request: ASN1Sequence): LDAPRequest? {
             // TRUE -- The attributes of that entry are returned as part of the search result, subject to access control restrictions.
             // FALSE/UNDEFINED -- Entry is ignored for the search
             // Filter object evaluates to undefined when the server cannot determine whether the assertion value matches an entry. E.g. an attribute requested is unrecognized.
-            val filterTag = filter.tagNo
+            val filterTag = LDAPFilterCode.fromId(filter.tagNo)
             val filterObj = filter.baseObject as ASN1Sequence
             // 0 = And -- True if all filters in the set evaluate to true; false if at least one is false.
             // 1 = Or -- True if at least one filter in the set evaluates to true; false if none are true.
@@ -210,9 +224,17 @@ fun parseRequest(socket: Socket, request: ASN1Sequence): LDAPRequest? {
             // 4 = DN Attributes
             val filterKey = String((filterObj.getObjectAt(0) as ASN1OctetString).octets, Charsets.US_ASCII)
             val filterValue = String((filterObj.getObjectAt(1) as ASN1OctetString).octets, Charsets.US_ASCII)
-            val attributes = sequence.getObjectAt(7) as ASN1Sequence
-            val attributeA = String((attributes.getObjectAt(0) as ASN1OctetString).octets, Charsets.US_ASCII)
+            val filters = ArrayList<LDAPSearchFilter>()
+
+            filters.add(LDAPSearchFilter(filterTag!!, filterKey, filterValue))
+
+            val attributes = ArrayList<LDAPSearchAttribute>()
+
+            for (attribute in (sequence.getObjectAt(7) as ASN1Sequence).objects) {
+                attributes.add(LDAPSearchAttribute(String((attribute as ASN1OctetString).octets, Charsets.US_ASCII)))
+            }
             // Not so sure on this. https://datatracker.ietf.org/doc/html/rfc4511#section-4.5.1.8
+
 
             println("Data:\n" +
                     "base DN: $baseDN\n" +
@@ -225,8 +247,18 @@ fun parseRequest(socket: Socket, request: ASN1Sequence): LDAPRequest? {
                     "filterTag: $filterTag\n" +
                     "FilterObjA: $filterKey\n" +
                     "FilterObjB: $filterValue\n" +
-                    "AttributesA: $attributeA")
+                    "Attributes: $attributes")
 
+            return LDAPSearchRequest(socket,
+                messageID.intValueExact(),
+                baseDN,
+                scope!!,
+                derefAliases!!,
+                sizeLimit,
+                timeLimit,
+                typesOnly,
+                filters,
+                attributes)
         }
         else -> {
             println("Invalid Request Code: ${operation.tagNo}\nRequest: $request")
