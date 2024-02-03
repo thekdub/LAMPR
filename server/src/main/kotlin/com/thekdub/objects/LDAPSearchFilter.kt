@@ -1,4 +1,4 @@
-package com.thekdub;
+package com.thekdub.objects;
 
 import com.thekdub.enums.LDAPFilterCode
 

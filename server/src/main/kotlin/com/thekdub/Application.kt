@@ -1,17 +1,16 @@
 package com.thekdub
 
 import com.thekdub.enums.*
-import com.thekdub.exceptions.InvalidRequestException
-import com.thekdub.exceptions.MalformattedRequestException
-import com.thekdub.exceptions.UnsupportedActionException
+import com.thekdub.objects.LDAPConnection
+import com.thekdub.objects.LDAPSearchAttribute
+import com.thekdub.objects.LDAPSearchFilter
+import com.thekdub.requests.LDAPBindRequest
+import com.thekdub.requests.LDAPRequest
+import com.thekdub.requests.LDAPSearchRequest
+import com.thekdub.responses.LDAPBindResponse
 import org.bouncycastle.asn1.*
 import org.bouncycastle.asn1.util.ASN1Dump
-import org.bouncycastle.asn1.x500.X500Name
-import java.io.BufferedInputStream
-import java.io.ByteArrayOutputStream
-import java.io.IOException
 import java.net.ServerSocket
-import java.net.Socket
 import java.util.concurrent.Executors
 
 fun main() {
@@ -21,146 +20,45 @@ fun main() {
 
     val threadPool = Executors.newWorkStealingPool(4)
 
+    // Test connection to AD server
+//    val testClient = LDAPConnection.create("192.168.1.80", 389)
+//    threadPool.submit(testClient)
+//    testClient.write(LDAPBindRequest(testClient, 1, 3, "cn=lampr,ou=service accounts,ou=company,dc=company1,dc=local", "xpDkY4B5Zw94").build())
+    // End AD test
+
     while (true) {
         val socket = serverSocket.accept()
+
+        val connection = LDAPConnection(socket)
+
         println()
         println("---- New client connected ----")
         println("\tIP: ${socket.inetAddress.hostAddress}")
         println("\tPort: ${socket.port} / ${socket.localPort}")
 
-        threadPool.submit {
-            handleClient(socket)
-        }
+        threadPool.submit(connection)
     }
 }
 
-fun handleClient(socket: Socket) {
-    try {
-        val input = BufferedInputStream(socket.getInputStream())
 
-        while (!socket.isClosed) {
-            if (input.available() > 0) {
-                val berData = ASN1InputStream(input).readObject()
-                println()
-                println("--- NEW DATA ---")
-                println("Received data: $berData")
-                println("Dump:\n${ASN1Dump.dumpAsString(berData)}")
-
-                if (berData is ASN1Sequence) {
-                    val messageID = (berData.getObjectAt(0) as ASN1Integer).intValueExact()
-                    val baseRequest = LDAPBasicRequest(socket, messageID)
-
-                    try {
-                        val request = parseRequest(socket, berData)
-
-                        if (request is LDAPBindRequest) {
-                            val response = createSuccessResponse(request.messageID)
-                            // createFailureResponse(request?.messageID?: 0, 49)
-                            request.reply(response)
-                        }
-                        else {
-                            socket.close()
-                        }
-
-                    }
-                    catch (eae: UnsupportedActionException) {
-                        baseRequest.reply(createFailureResponse(messageID, LDAPResultCode.UNWILLING_TO_PERFORM))
-                    }
-                    catch (ire: InvalidRequestException) {
-                        baseRequest.reply(createFailureResponse(messageID, LDAPResultCode.UNWILLING_TO_PERFORM))
-                    }
-                    catch (mre: MalformattedRequestException) {
-                        baseRequest.reply(createFailureResponse(messageID, LDAPResultCode.UNWILLING_TO_PERFORM))
-                    }
-                    catch (e: Exception) {
-                        e.printStackTrace()
-                    }
-                }
-            }
-        }
-    }
-    catch (e: IOException) {
-        e.printStackTrace()
-    }
-    finally {
-        socket.close()
-    }
-}
-
-fun createSuccessResponse(messageId: Int): ByteArray {
-    val response = ASN1EncodableVector()
-
-    // Message ID
-    response.add(ASN1Integer(messageId.toLong()))
-
-    // BindResponse (Application Tag 1)
-    val bindResponse = ASN1EncodableVector()
-
-    // Result Code: success (0)
-    bindResponse.add(ASN1Enumerated(LDAPResultCode.SUCCESS.id))
-
-    // Matched DN: empty
-    bindResponse.add(X500Name(""))
-
-    // Diagnostic Message: empty
-    bindResponse.add(DERUTF8String(""))
-
-    // Add BindResponse to LDAPMessage
-    response.add(DERTaggedObject(true, LDAPOperationCode.BIND_RESPONSE.id, DERSequence(bindResponse)))
-
-    println("Response: ${DERSequence(response)}")
-
-    return encodeASN1(DERSequence(response))
-}
-
-fun createFailureResponse(messageId: Int, resultCode: LDAPResultCode): ByteArray {
-    val response = ASN1EncodableVector()
-
-    // Message ID
-    response.add(ASN1Integer(messageId.toLong()))
-
-    // BindResponse (Application Tag 1)
-    val bindResponse = ASN1EncodableVector()
-
-    // Result Code: e.g., invalidCredentials (49)
-    bindResponse.add(ASN1Enumerated(resultCode.id))
-
-    // Matched DN: empty
-    bindResponse.add(X500Name(""))
-
-    // Diagnostic Message: empty or appropriate message
-    bindResponse.add(DERUTF8String("Invalid credentials"))
-
-    // Add BindResponse to LDAPMessage
-    response.add(DERTaggedObject(true, 1, DERSequence(bindResponse)))
-
-    return encodeASN1(DERSequence(response))
-}
-
-fun encodeASN1(encodable: ASN1Encodable): ByteArray {
-    val bOut = ByteArrayOutputStream()
-    val dOut = ASN1OutputStream.create(bOut, ASN1Encoding.DER)
-    dOut.writeObject(encodable)
-    dOut.close()
-    return bOut.toByteArray()
-}
-
-fun parseRequest(socket: Socket, request: ASN1Sequence): LDAPRequest? {
-    val messageID = request.getObjectAt(0) as ASN1Integer
+fun parseRequest(connection: LDAPConnection, request: ASN1Sequence): LDAPMessage? {
+    val messageID = (request.getObjectAt(0) as ASN1Integer).intValueExact()
     val operation = request.getObjectAt(1) as ASN1TaggedObject
+    val operationClass = operation.tagClass
+    println("OpClass: $operationClass")
     val operationID = operation.tagNo;
     when (LDAPOperationCode.fromId(operationID)) {
         LDAPOperationCode.BIND_REQUEST -> { // BindRequest
             val sequence = operation.baseObject as ASN1Sequence
-            val ldapVersion = sequence.getObjectAt(0) as ASN1Integer
+            val ldapVersion = (sequence.getObjectAt(0) as ASN1Integer).intValueExact()
             val username = String((sequence.getObjectAt(1) as ASN1OctetString).octets, Charsets.US_ASCII)
             val passwordObject = sequence.getObjectAt(2) as ASN1TaggedObject
             when (passwordObject.tagNo) {
                 0 -> {
                     val password = String((passwordObject.baseObject as ASN1OctetString).octets, Charsets.US_ASCII)
-                    return LDAPBindRequest(socket,
-                        messageID.intValueExact(),
-                        ldapVersion.intValueExact(),
+                    return LDAPBindRequest(connection,
+                        messageID,
+                        ldapVersion,
                         username,
                         password)
                 }
@@ -168,7 +66,9 @@ fun parseRequest(socket: Socket, request: ASN1Sequence): LDAPRequest? {
                     println("Invalid Password Code: ${passwordObject.tagNo}\nRequest: $request")
                 }
             }
-
+        }
+        LDAPOperationCode.BIND_RESPONSE -> {
+            return LDAPBindResponse(connection, messageID, LDAPResultCode.SUCCESS, null, null)
         }
         LDAPOperationCode.UNBIND_REQUEST -> { // UnbindRequest
             val test = String((operation.baseObject as ASN1OctetString).octets, Charsets.US_ASCII);
@@ -183,6 +83,38 @@ fun parseRequest(socket: Socket, request: ASN1Sequence): LDAPRequest? {
 
         }
         LDAPOperationCode.SEARCH_REQUEST -> { // Search Request
+
+            // [2, [APPLICATION 3][#, org.bouncycastle.asn1.ASN1Enumerated@202, org.bouncycastle.asn1.ASN1Enumerated@202, 0, 5, FALSE, [CONTEXT 7]#6f626a656374436c617373, [#737562736368656d61537562656e747279]]]
+            /*
+            Sequence
+                Integer(2)
+                Tagged [APPLICATION 3] IMPLICIT
+                    Sequence
+                        DER Octet String[0]
+                        DER Enumerated(0)
+                        DER Enumerated(0)
+                        Integer(0)
+                        Integer(5)
+                        Boolean(false)
+                        Tagged [CONTEXT 7] IMPLICIT
+                            DER Octet String[11]
+                        Sequence
+                            DER Octet String[17]
+            Data:
+            base DN:
+            Scope: BASE_OBJECT
+            Deref Aliases: NEVER_DEREF_ALIASES
+            Size Limit: 0
+            Time Limit: 5
+            Types Only: false
+            Filter: [CONTEXT 7]#6f626a656374436c617373
+            filterTag: PRESENT
+            Attributes: [com.thekdub.objects.LDAPSearchAttribute={value: subschemaSubentry}]
+
+
+             */
+
+
             val sequence = operation.baseObject as ASN1Sequence
             val baseDN = String((sequence.getObjectAt(0) as ASN1OctetString).octets, Charsets.US_ASCII)
             val scope = LDAPSearchScopeCode.fromId((sequence.getObjectAt(1) as ASN1Enumerated).intValueExact())
@@ -200,7 +132,7 @@ fun parseRequest(socket: Socket, request: ASN1Sequence): LDAPRequest? {
             // FALSE/UNDEFINED -- Entry is ignored for the search
             // Filter object evaluates to undefined when the server cannot determine whether the assertion value matches an entry. E.g. an attribute requested is unrecognized.
             val filterTag = LDAPFilterCode.fromId(filter.tagNo)
-            val filterObj = filter.baseObject as ASN1Sequence
+            val filterObj = filter.baseObject as DEROctetString
             // 0 = And -- True if all filters in the set evaluate to true; false if at least one is false.
             // 1 = Or -- True if at least one filter in the set evaluates to true; false if none are true.
             // 2 = Not -- Negates the value of a filter.
@@ -222,11 +154,13 @@ fun parseRequest(socket: Socket, request: ASN1Sequence): LDAPRequest? {
             // 2 = Type
             // 3 = Match Value
             // 4 = DN Attributes
-            val filterKey = String((filterObj.getObjectAt(0) as ASN1OctetString).octets, Charsets.US_ASCII)
-            val filterValue = String((filterObj.getObjectAt(1) as ASN1OctetString).octets, Charsets.US_ASCII)
+//            val filterKey = String((filterObj.getObjectAt(0) as ASN1OctetString).octets, Charsets.US_ASCII)
+//            val filterValue = String((filterObj.getObjectAt(1) as ASN1OctetString).octets, Charsets.US_ASCII)
             val filters = ArrayList<LDAPSearchFilter>()
 
-            filters.add(LDAPSearchFilter(filterTag!!, filterKey, filterValue))
+            println("Filter Object: ${String(filterObj.octets, Charsets.US_ASCII)}")
+
+//            filters.add(LDAPSearchFilter(filterTag!!, filterKey, filterValue))
 
             val attributes = ArrayList<LDAPSearchAttribute>()
 
@@ -245,12 +179,12 @@ fun parseRequest(socket: Socket, request: ASN1Sequence): LDAPRequest? {
                     "Types Only: $typesOnly\n" +
                     "Filter: $filter\n" +
                     "filterTag: $filterTag\n" +
-                    "FilterObjA: $filterKey\n" +
-                    "FilterObjB: $filterValue\n" +
+//                    "FilterObjA: $filterKey\n" +
+//                    "FilterObjB: $filterValue\n" +
                     "Attributes: $attributes")
 
-            return LDAPSearchRequest(socket,
-                messageID.intValueExact(),
+            return LDAPSearchRequest(connection,
+                messageID,
                 baseDN,
                 scope!!,
                 derefAliases!!,

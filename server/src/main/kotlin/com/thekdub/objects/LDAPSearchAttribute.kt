@@ -1,4 +1,4 @@
-package com.thekdub
+package com.thekdub.objects
 
 class LDAPSearchAttribute(
     val value: String

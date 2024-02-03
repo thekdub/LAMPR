@@ -1,11 +1,13 @@
-package com.thekdub
+package com.thekdub.requests
 
+import com.thekdub.objects.LDAPConnection
+import com.thekdub.objects.LDAPSearchAttribute
+import com.thekdub.objects.LDAPSearchFilter
 import com.thekdub.enums.LDAPDerefAliasesCode
 import com.thekdub.enums.LDAPSearchScopeCode
-import java.net.Socket
 
 class LDAPSearchRequest(
-    socket: Socket,
+    connection: LDAPConnection,
     messageID: Int,
     val baseDN: String,
     val scope: LDAPSearchScopeCode,
@@ -15,16 +17,19 @@ class LDAPSearchRequest(
     val typesOnly: Boolean,
     val filters: ArrayList<LDAPSearchFilter>,
     val attributes: ArrayList<LDAPSearchAttribute>
-) : LDAPRequest(socket, messageID) {
+) : LDAPRequest(connection, messageID) {
 
     init {
         println(this)
     }
 
+    override fun build(): ByteArray {
+        TODO("Not yet implemented")
+    }
+
     override fun toString(): String {
         return "${javaClass.name}={" +
-                "socketIP: ${socket.inetAddress.hostAddress}, " +
-                "socketPort: ${socket.localPort}, " +
+                "connection: $connection, " +
                 "messageID: $messageID, " +
                 "baseDN: $baseDN, " +
                 "scope: $scope, " +
