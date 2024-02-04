@@ -5,10 +5,7 @@ import com.thekdub.enums.LDAPResultCode
 import com.thekdub.exceptions.InvalidRequestException
 import com.thekdub.exceptions.MalformedRequestException
 import com.thekdub.exceptions.UnsupportedActionException
-import com.thekdub.networking.requests.LDAPBasicRequest
-import com.thekdub.networking.requests.LDAPBindRequest
-import com.thekdub.networking.requests.LDAPSearchRequest
-import com.thekdub.networking.requests.LDAPUnbindRequest
+import com.thekdub.networking.requests.*
 import com.thekdub.networking.responses.LDAPBindResponse
 import io.ktor.util.network.*
 import org.bouncycastle.asn1.ASN1InputStream
@@ -54,7 +51,6 @@ class LDAPConnection(
     override fun run() {
         try {
             val input = BufferedInputStream(socket.getInputStream())
-
             while (!socket.isClosed) {
                 if (input.available() > 0) {
                     val berData = ASN1InputStream(input).readObject()
@@ -69,14 +65,16 @@ class LDAPConnection(
                         nextMessageID = Math.max(nextMessageID, messageID + 1)
                         val baseRequest = LDAPBasicRequest(this, messageID)
 
+
+
                         try {
                             val message = parseMessage(this, berData)
                             println("Parsed Data: $message")
 
                             when (message) {
                                 is LDAPBindRequest -> {
-                                    val response = LDAPBindResponse(this, message.messageID, LDAPResultCode.INVALID_CREDENTIALS, "TestA", "TestB")
-                                    //val response = LDAPBindResponse(this, message.messageID, LDAPResultCode.SUCCESS, null, null)
+                                    //val response = LDAPBindResponse(this, message.messageID, LDAPResultCode.INVALID_CREDENTIALS, "TestA", "TestB")
+                                    val response = LDAPBindResponse(this, message.messageID, LDAPResultCode.SUCCESS, null, null)
                                     // createFailureResponse(request?.messageID?: 0, 49)
                                     write(response.build())
                                 }
@@ -93,10 +91,13 @@ class LDAPConnection(
                                     }
                                 }
                                 is LDAPUnbindRequest -> {
-
+                                    println("Unhandled Unbind Request\n$message")
                                 }
                                 is LDAPSearchRequest -> {
-
+                                    println("Unhandled Search Request\n$message")
+                                }
+                                is LDAPAbandonRequest -> {
+                                    println("Unhandled Abandon Request\n$message")
                                 }
                                 else -> {
                                     socket.close()
@@ -168,6 +169,7 @@ class LDAPConnection(
             LDAPOperationCode.BIND_RESPONSE -> LDAPBindResponse.fromASN1Sequence(connection, request)
             LDAPOperationCode.UNBIND_REQUEST -> LDAPUnbindRequest.fromASN1Sequence(connection, request)
             LDAPOperationCode.SEARCH_REQUEST -> LDAPSearchRequest.fromASN1Sequence(connection, request)
+            LDAPOperationCode.ABANDON_REQUEST -> LDAPAbandonRequest.fromASN1Sequence(connection, request)
             else -> {
                 println("Invalid Request Code: ${operation.tagNo}\nRequest: $request")
                 null
