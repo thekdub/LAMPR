@@ -6,6 +6,12 @@ import java.util.concurrent.Executors
 class LDAPServer(
     private val port: Int
 ): Thread() {
+    var id = nextID++
+        private set
+
+    companion object {
+        private var nextID = 0;
+    }
 
     /**
      * When an object implementing interface `Runnable` is used
@@ -20,21 +26,16 @@ class LDAPServer(
      * @see java.lang.Thread.run
      */
     override fun run() {
-        println("Started LDAP Server on port $port")
+        println("-- LDAP Server [$id] Started @ Port $port --")
         val server = ServerSocket(port)
-
         val threadPool = Executors.newWorkStealingPool(4)
         while (true) {
             val socket = server.accept()
-
             val connection = LDAPConnection(socket)
-
-            println()
-            println("---- New client connected ----")
-            println("\tIP: ${socket.inetAddress.hostAddress}")
-            println("\tPort: ${socket.port} / ${socket.localPort}")
-
             threadPool.submit(connection)
+            println("-- LDAP Server [$id] Connection [${connection.id}] --\n" +
+                    "IP: ${socket.inetAddress.hostAddress}\n" +
+                    "Port: ${socket.port} / ${socket.localPort}")
         }
     }
 

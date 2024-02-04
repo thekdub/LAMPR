@@ -20,7 +20,7 @@ class LDAPBindResponse(
             val messageID = (data.getObjectAt(0) as ASN1Integer).intValueExact()
             val operation = data.getObjectAt(1) as ASN1TaggedObject
             val sequence = operation.baseObject as ASN1Sequence
-            val bindResponse = LDAPResultCode.fromId((sequence.getObjectAt(0) as ASN1Integer).intValueExact())
+            val bindResponse = LDAPResultCode.fromId((sequence.getObjectAt(0) as ASN1Enumerated).intValueExact())
             val matchedDN = String((sequence.getObjectAt(1) as ASN1OctetString).octets, Charsets.US_ASCII)
             val errorMessage = String((sequence.getObjectAt(2) as ASN1OctetString).octets, Charsets.US_ASCII)
             return LDAPBindResponse(connection, messageID, bindResponse!!, matchedDN, errorMessage)

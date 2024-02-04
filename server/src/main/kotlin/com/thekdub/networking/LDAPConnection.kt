@@ -3,7 +3,7 @@ package com.thekdub.networking
 import com.thekdub.enums.LDAPOperationCode
 import com.thekdub.enums.LDAPResultCode
 import com.thekdub.exceptions.InvalidRequestException
-import com.thekdub.exceptions.MalformattedRequestException
+import com.thekdub.exceptions.MalformedRequestException
 import com.thekdub.exceptions.UnsupportedActionException
 import com.thekdub.networking.requests.LDAPBasicRequest
 import com.thekdub.networking.requests.LDAPBindRequest
@@ -26,10 +26,14 @@ class LDAPConnection(
     private val socket: Socket
 ): Runnable {
 
+    var id = nextID++
+        private set
+
     private var nextMessageID: Int = 1
-    private var isAuthenticated: Boolean = false
+    private var bound: Boolean = false
 
     companion object {
+        private var nextID: Int = 0
         fun create(host: String, port: Int): LDAPConnection {
             return LDAPConnection(SocketFactory.getDefault().createSocket(host, port))
         }
@@ -56,9 +60,9 @@ class LDAPConnection(
                     val berData = ASN1InputStream(input).readObject()
 
                     println()
-                    println("--- NEW DATA ---")
-                    println("Received data: $berData")
-                    println("Dump:\n${ASN1Dump.dumpAsString(berData)}")
+                    println("--- LDAP Connection [$id] New Data ---\n" +
+                            "Raw: $berData\n" +
+                            "Dump:\n${ASN1Dump.dumpAsString(berData)}")
 
                     if (berData is ASN1Sequence) {
                         val messageID = (berData.getObjectAt(0) as ASN1Integer).intValueExact()
@@ -66,45 +70,70 @@ class LDAPConnection(
                         val baseRequest = LDAPBasicRequest(this, messageID)
 
                         try {
-                            val message = parseRequest(this, berData)
+                            val message = parseMessage(this, berData)
                             println("Parsed Data: $message")
 
-                            if (message is LDAPBindRequest) {
-                                val response = LDAPBindResponse(this, message.messageID, LDAPResultCode.SUCCESS, null, null)
-                                // createFailureResponse(request?.messageID?: 0, 49)
-                                write(response.build())
-                            }
-                            else {
-                                socket.close()
-                            }
+                            when (message) {
+                                is LDAPBindRequest -> {
+                                    val response = LDAPBindResponse(this, message.messageID, LDAPResultCode.INVALID_CREDENTIALS, "TestA", "TestB")
+                                    //val response = LDAPBindResponse(this, message.messageID, LDAPResultCode.SUCCESS, null, null)
+                                    // createFailureResponse(request?.messageID?: 0, 49)
+                                    write(response.build())
+                                }
+                                is LDAPBindResponse -> {
+                                    when (message.resultCode) {
+                                        LDAPResultCode.SUCCESS -> {
+                                            bound = true
+                                            println("Bound to: ${message.matchedDN}")
+                                        }
+                                        else -> {
+                                            bound = false
+                                            println("Failed to bind: ${message.errorMessage}")
+                                        }
+                                    }
+                                }
+                                is LDAPUnbindRequest -> {
 
+                                }
+                                is LDAPSearchRequest -> {
+
+                                }
+                                else -> {
+                                    socket.close()
+                                    throw InvalidRequestException("Invalid request type.")
+                                }
+
+                            }
                         }
-                        catch (eae: UnsupportedActionException) {
+                        catch (e: UnsupportedActionException) {
                             write(
                                 LDAPBindResponse(this,
                                 messageID,
                                 LDAPResultCode.UNWILLING_TO_PERFORM,
                                 null,
-                                null
+                                "Unsupported Action."
                             ).build())
+                            socket.close()
                         }
-                        catch (ire: InvalidRequestException) {
+                        catch (e: InvalidRequestException) {
                             write(
                                 LDAPBindResponse(this,
                                 messageID,
                                 LDAPResultCode.UNWILLING_TO_PERFORM,
                                 null,
-                                null
+                                "Invalid Request."
                             ).build())
+                            socket.close()
                         }
-                        catch (mre: MalformattedRequestException) {
+                        catch (e: MalformedRequestException) {
                             write(
                                 LDAPBindResponse(this,
                                 messageID,
                                 LDAPResultCode.UNWILLING_TO_PERFORM,
                                 null,
-                                null
+                                "Malformed Request."
                             ).build())
+                            socket.close()
                         }
                         catch (e: Exception) {
                             e.printStackTrace()
@@ -128,7 +157,7 @@ class LDAPConnection(
         out.flush()
     }
 
-    private fun parseRequest(connection: LDAPConnection, request: ASN1Sequence): LDAPMessage? {
+    private fun parseMessage(connection: LDAPConnection, request: ASN1Sequence): LDAPMessage? {
         val messageID = (request.getObjectAt(0) as ASN1Integer).intValueExact()
         val operation = request.getObjectAt(1) as ASN1TaggedObject
         val operationClass = operation.tagClass
