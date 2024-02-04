@@ -1,8 +1,8 @@
-package com.thekdub.responses
+package com.thekdub.networking.responses
 
 import com.thekdub.enums.LDAPOperationCode
 import com.thekdub.enums.LDAPResultCode
-import com.thekdub.objects.LDAPConnection
+import com.thekdub.networking.LDAPConnection
 import com.thekdub.utilities.Encoding
 import org.bouncycastle.asn1.*
 import kotlin.text.toByteArray

@@ -1,10 +1,8 @@
-package com.thekdub.requests
+package com.thekdub.networking.requests
 
 import com.thekdub.enums.LDAPOperationCode
-import com.thekdub.exceptions.InvalidRequestException
-import com.thekdub.objects.LDAPConnection
+import com.thekdub.networking.LDAPConnection
 import org.bouncycastle.asn1.*
-import kotlin.text.toByteArray
 
 class LDAPUnbindRequest(
     connection: LDAPConnection,

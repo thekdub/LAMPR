@@ -1,17 +1,20 @@
-package com.thekdub.objects
+package com.thekdub.networking
 
+import com.thekdub.enums.LDAPOperationCode
 import com.thekdub.enums.LDAPResultCode
 import com.thekdub.exceptions.InvalidRequestException
 import com.thekdub.exceptions.MalformattedRequestException
 import com.thekdub.exceptions.UnsupportedActionException
-import com.thekdub.parseRequest
-import com.thekdub.requests.LDAPBasicRequest
-import com.thekdub.requests.LDAPBindRequest
-import com.thekdub.responses.LDAPBindResponse
+import com.thekdub.networking.requests.LDAPBasicRequest
+import com.thekdub.networking.requests.LDAPBindRequest
+import com.thekdub.networking.requests.LDAPSearchRequest
+import com.thekdub.networking.requests.LDAPUnbindRequest
+import com.thekdub.networking.responses.LDAPBindResponse
 import io.ktor.util.network.*
 import org.bouncycastle.asn1.ASN1InputStream
 import org.bouncycastle.asn1.ASN1Integer
 import org.bouncycastle.asn1.ASN1Sequence
+import org.bouncycastle.asn1.ASN1TaggedObject
 import org.bouncycastle.asn1.util.ASN1Dump
 import java.io.BufferedInputStream
 import java.io.DataOutputStream
@@ -77,7 +80,8 @@ class LDAPConnection(
 
                         }
                         catch (eae: UnsupportedActionException) {
-                            write(LDAPBindResponse(this,
+                            write(
+                                LDAPBindResponse(this,
                                 messageID,
                                 LDAPResultCode.UNWILLING_TO_PERFORM,
                                 null,
@@ -85,7 +89,8 @@ class LDAPConnection(
                             ).build())
                         }
                         catch (ire: InvalidRequestException) {
-                            write(LDAPBindResponse(this,
+                            write(
+                                LDAPBindResponse(this,
                                 messageID,
                                 LDAPResultCode.UNWILLING_TO_PERFORM,
                                 null,
@@ -93,7 +98,8 @@ class LDAPConnection(
                             ).build())
                         }
                         catch (mre: MalformattedRequestException) {
-                            write(LDAPBindResponse(this,
+                            write(
+                                LDAPBindResponse(this,
                                 messageID,
                                 LDAPResultCode.UNWILLING_TO_PERFORM,
                                 null,
@@ -120,6 +126,24 @@ class LDAPConnection(
         val out = DataOutputStream(socket.getOutputStream())
         out.write(data)
         out.flush()
+    }
+
+    private fun parseRequest(connection: LDAPConnection, request: ASN1Sequence): LDAPMessage? {
+        val messageID = (request.getObjectAt(0) as ASN1Integer).intValueExact()
+        val operation = request.getObjectAt(1) as ASN1TaggedObject
+        val operationClass = operation.tagClass
+        //println("OpClass: $operationClass")
+        val operationID = operation.tagNo;
+        return when (LDAPOperationCode.fromId(operationID)) {
+            LDAPOperationCode.BIND_REQUEST -> LDAPBindRequest.fromASN1Sequence(connection, request)
+            LDAPOperationCode.BIND_RESPONSE -> LDAPBindResponse.fromASN1Sequence(connection, request)
+            LDAPOperationCode.UNBIND_REQUEST -> LDAPUnbindRequest.fromASN1Sequence(connection, request)
+            LDAPOperationCode.SEARCH_REQUEST -> LDAPSearchRequest.fromASN1Sequence(connection, request)
+            else -> {
+                println("Invalid Request Code: ${operation.tagNo}\nRequest: $request")
+                null
+            }
+        }
     }
 
     fun getLocalAddress(): String? {

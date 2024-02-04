@@ -1,13 +1,11 @@
-package com.thekdub.requests
+package com.thekdub.networking.requests
 
-import com.thekdub.LDAPMessage
-import com.thekdub.objects.LDAPConnection
+import com.thekdub.networking.LDAPConnection
 import com.thekdub.objects.LDAPSearchAttribute
 import com.thekdub.objects.LDAPSearchFilter
 import com.thekdub.enums.LDAPDerefAliasesCode
 import com.thekdub.enums.LDAPFilterCode
 import com.thekdub.enums.LDAPSearchScopeCode
-import com.thekdub.exceptions.InvalidRequestException
 import org.bouncycastle.asn1.*
 
 class LDAPSearchRequest(

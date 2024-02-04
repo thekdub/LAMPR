@@ -1,7 +1,7 @@
-package com.thekdub.responses
+package com.thekdub.networking.responses
 
-import com.thekdub.LDAPMessage
-import com.thekdub.objects.LDAPConnection
+import com.thekdub.networking.LDAPMessage
+import com.thekdub.networking.LDAPConnection
 
 abstract class LDAPResponse (
     val connection: LDAPConnection,
