@@ -1,18 +1,23 @@
 package com.thekdub.requests
 
 import com.thekdub.objects.LDAPConnection
+import org.bouncycastle.asn1.ASN1Integer
+import org.bouncycastle.asn1.ASN1Sequence
 
 class LDAPBasicRequest(
     connection: LDAPConnection,
     messageID: Int
 ) : LDAPRequest(connection, messageID) {
 
-    init {
-        println(this)
-    }
-
     override fun build(): ByteArray {
         TODO("Not yet implemented")
+    }
+
+    companion object {
+        fun fromASN1Sequence(connection: LDAPConnection, data: ASN1Sequence): LDAPBasicRequest {
+            val messageID = (data.getObjectAt(0) as ASN1Integer).intValueExact()
+            return LDAPBasicRequest(connection, messageID)
+        }
     }
 
     override fun toString(): String {

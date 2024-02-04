@@ -24,6 +24,7 @@ class LDAPConnection(
 ): Runnable {
 
     private var nextMessageID: Int = 1
+    private var isAuthenticated: Boolean = false
 
     companion object {
         fun create(host: String, port: Int): LDAPConnection {
@@ -62,10 +63,11 @@ class LDAPConnection(
                         val baseRequest = LDAPBasicRequest(this, messageID)
 
                         try {
-                            val request = parseRequest(this, berData)
+                            val message = parseRequest(this, berData)
+                            println("Parsed Data: $message")
 
-                            if (request is LDAPBindRequest) {
-                                val response = LDAPBindResponse(this, request.messageID, LDAPResultCode.SUCCESS, null, null)
+                            if (message is LDAPBindRequest) {
+                                val response = LDAPBindResponse(this, message.messageID, LDAPResultCode.SUCCESS, null, null)
                                 // createFailureResponse(request?.messageID?: 0, 49)
                                 write(response.build())
                             }

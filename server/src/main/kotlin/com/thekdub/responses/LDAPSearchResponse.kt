@@ -1,15 +1,25 @@
 package com.thekdub.responses
 
 import com.thekdub.objects.LDAPConnection
+import org.bouncycastle.asn1.ASN1Integer
+import org.bouncycastle.asn1.ASN1Sequence
 
-// todo: Change this to actually represent a search response!
 class LDAPSearchResponse(
     connection: LDAPConnection,
     messageID: Int
 ) : LDAPResponse(connection, messageID) {
+
+    companion object {
+        fun fromASN1Sequence(connection: LDAPConnection, data: ASN1Sequence): LDAPSearchResponse {
+            val messageID = (data.getObjectAt(0) as ASN1Integer).intValueExact()
+            return LDAPSearchResponse(connection, messageID)
+        }
+    }
+
     override fun build(): ByteArray {
         TODO("Not yet implemented")
     }
+
     override fun toString(): String {
         return "${javaClass.name}={" +
                 "connection: $connection, " +

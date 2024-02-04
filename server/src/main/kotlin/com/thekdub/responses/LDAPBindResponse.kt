@@ -5,7 +5,6 @@ import com.thekdub.enums.LDAPResultCode
 import com.thekdub.objects.LDAPConnection
 import com.thekdub.utilities.Encoding
 import org.bouncycastle.asn1.*
-import org.bouncycastle.asn1.x500.X500Name
 import kotlin.text.toByteArray
 
 class LDAPBindResponse(
@@ -16,26 +15,28 @@ class LDAPBindResponse(
     val errorMessage: String?
 ) : LDAPResponse(connection, messageID) {
 
-    override fun build(): ByteArray {
-        val response = ASN1EncodableVector()
-        // Message ID
-        response.add(ASN1Integer(messageID.toLong()))
-        // BindResponse (Application Tag 1)
-        val bindResponse = ASN1EncodableVector()
-        // Result Code: success (0)
-        bindResponse.add(ASN1Enumerated(resultCode.id))
-        // Matched DN: empty
-        bindResponse.add(DEROctetString((matchedDN?: "").toByteArray()))
-        // Diagnostic Message: empty
-        bindResponse.add(DEROctetString((errorMessage?: "").toByteArray()))
-        // Add BindResponse to LDAPMessage
-        response.add(DERTaggedObject(false, 64, LDAPOperationCode.BIND_RESPONSE.id, DERSequence(bindResponse)))
-
-        println("Response: ${DERSequence(response)}")
-
-        return Encoding.asn1ToByteArray(DERSequence(response))
+    companion object {
+        fun fromASN1Sequence(connection: LDAPConnection, data: ASN1Sequence): LDAPBindResponse {
+            val messageID = (data.getObjectAt(0) as ASN1Integer).intValueExact()
+            val operation = data.getObjectAt(1) as ASN1TaggedObject
+            val sequence = operation.baseObject as ASN1Sequence
+            val bindResponse = LDAPResultCode.fromId((sequence.getObjectAt(0) as ASN1Integer).intValueExact())
+            val matchedDN = String((sequence.getObjectAt(1) as ASN1OctetString).octets, Charsets.US_ASCII)
+            val errorMessage = String((sequence.getObjectAt(2) as ASN1OctetString).octets, Charsets.US_ASCII)
+            return LDAPBindResponse(connection, messageID, bindResponse!!, matchedDN, errorMessage)
+        }
     }
 
+    override fun build(): ByteArray {
+        val response = ASN1EncodableVector()
+        response.add(ASN1Integer(messageID.toLong()))   // Message ID
+        val bindResponse = ASN1EncodableVector()
+        bindResponse.add(ASN1Enumerated(resultCode.id)) // Result Code
+        bindResponse.add(DEROctetString((matchedDN?: "").toByteArray()))    // Matched DN
+        bindResponse.add(DEROctetString((errorMessage?: "").toByteArray())) // Error Message
+        response.add(DERTaggedObject(false, 64, LDAPOperationCode.BIND_RESPONSE.id, DERSequence(bindResponse)))
+        return Encoding.asn1ToByteArray(DERSequence(response))
+    }
 
     override fun toString(): String {
         return "${javaClass.name}={" +

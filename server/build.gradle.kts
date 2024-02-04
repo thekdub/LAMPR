@@ -22,4 +22,7 @@ dependencies {
     implementation("org.bouncycastle:bcpkix-jdk18on:1.77")
     // https://mvnrepository.com/artifact/org.bouncycastle/bcprov-jdk18on
     implementation("org.bouncycastle:bcprov-jdk18on:1.77")
+    // https://mvnrepository.com/artifact/com.unboundid/unboundid-ldapsdk
+    testImplementation("com.unboundid:unboundid-ldapsdk:6.0.11")
+
 }

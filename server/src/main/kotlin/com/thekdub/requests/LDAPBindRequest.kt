@@ -1,11 +1,9 @@
 package com.thekdub.requests
 
 import com.thekdub.enums.LDAPOperationCode
+import com.thekdub.exceptions.InvalidRequestException
 import com.thekdub.objects.LDAPConnection
-import com.thekdub.utilities.Encoding
-import io.ktor.utils.io.core.*
 import org.bouncycastle.asn1.*
-import org.bouncycastle.asn1.util.ASN1Dump
 import kotlin.text.toByteArray
 
 class LDAPBindRequest(
@@ -16,8 +14,33 @@ class LDAPBindRequest(
     private val password: String
 ) : LDAPRequest(connection, messageID) {
 
-    init {
-        println(this)
+    companion object {
+        fun fromASN1Sequence(connection: LDAPConnection, data: ASN1Sequence): LDAPBindRequest {
+            val messageID = (data.getObjectAt(0) as ASN1Integer).intValueExact()
+            val operation = data.getObjectAt(1) as ASN1TaggedObject
+            val operationClass = operation.tagClass
+            val operationID = operation.tagNo;
+            val sequence = operation.baseObject as ASN1Sequence
+            val ldapVersion = (sequence.getObjectAt(0) as ASN1Integer).intValueExact()
+            val username = String((sequence.getObjectAt(1) as ASN1OctetString).octets, Charsets.US_ASCII)
+            val passwordObject = sequence.getObjectAt(2) as ASN1TaggedObject
+            when (passwordObject.tagNo) {
+                0 -> {
+                    val password = String((passwordObject.baseObject as ASN1OctetString).octets, Charsets.US_ASCII)
+                    return LDAPBindRequest(
+                        connection,
+                        messageID,
+                        ldapVersion,
+                        username,
+                        password
+                    )
+                }
+                else -> {
+                    println("Invalid Password Code: ${passwordObject.tagNo}\nRequest: $data")
+                }
+            }
+            throw InvalidRequestException("An unexpected error occurred while parsing this request!")
+        }
     }
 
     override fun build(): ByteArray {
@@ -48,7 +71,5 @@ class LDAPBindRequest(
                 "username: $username, " +
                 "password: $password}"
     }
-
-
 
 }
