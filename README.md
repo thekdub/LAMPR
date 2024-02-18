@@ -1,5 +1,7 @@
 # LAMPR - LDAP Authentication Manager & Proxy Relay
 
+## Note: This application is currently in development and is not ready for production use!
+
 ![LAMPR Logo](./images/logo.png)
 
 [![License](https://img.shields.io/badge/license-copyright-blue.svg)](LICENSE)
